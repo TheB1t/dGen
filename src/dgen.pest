@@ -1,0 +1,40 @@
+program             = _{ SOI ~ (statement ~ ";")* ~ EOI }
+
+statement           = _{
+    var_decl
+    | assignment
+    | expr
+}
+
+var_decl            = { type ~ identifier ~ ("=" ~ expr)? }
+assignment          = { identifier ~ "=" ~ expr }
+type                = _{ identifier }
+
+identifier          = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
+
+expr                =  { prefix* ~ primary ~ postfix* ~ (infix ~ prefix* ~ primary ~ postfix* )* }
+infix               = _{ add | sub | mul | div | pow }
+prefix              = _{ neg | inc | dec }
+postfix             = _{ inc | dec }
+add                 =  { "+" }
+sub                 =  { "-" }
+mul                 =  { "*" }
+div                 =  { "/" }
+pow                 =  { "^" }
+neg                 =  { "-" }
+inc                 =  { "++" }
+dec                 =  { "--" }
+primary             = _{
+    number
+    | identifier
+    | string
+    | boolean
+    | "(" ~ expr ~ ")"
+}
+
+number              = @{ (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT) }
+string              = _{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+boolean             = _{ "true" | "false" }
+
+WHITESPACE          = _{ " " | "\t" | NEWLINE }
+COMMENT             = _{ "//" ~ (!NEWLINE ~ ANY)* }
