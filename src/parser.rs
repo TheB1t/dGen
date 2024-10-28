@@ -24,7 +24,7 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
     Add,
     Sub,
@@ -45,7 +45,7 @@ pub enum Operator {
     Gte,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Number(f64),
     Bool(bool),
@@ -63,7 +63,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
     VarDecl {
@@ -82,8 +82,9 @@ fn parse_expr(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expr {
     pratt
         .map_primary(|primary| match primary.as_rule() {
             Rule::number        => Expr::Number(primary.as_str().parse().unwrap()),
-            Rule::boolean       => Expr::Bool(primary.as_str().parse().unwrap()),
-            Rule::string        => Expr::String(primary.as_str().to_string()),
+            Rule::btrue         => Expr::Bool(true),
+            Rule::bfalse        => Expr::Bool(false),
+            Rule::string        => Expr::String(primary.as_str().to_string().replace("\"", "")),
             Rule::identifier    => Expr::Identifier(primary.as_str().to_string()),
             Rule::expr          => parse_expr(primary.into_inner(), pratt), // from "(" ~ expr ~ ")"
             _                   => unreachable!(),

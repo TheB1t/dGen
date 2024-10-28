@@ -35,15 +35,17 @@ inc                 =  { "++" }
 dec                 =  { "--" }
 primary             = _{
     number
+    | btrue
+    | bfalse
     | identifier
     | string
-    | boolean
     | "(" ~ expr ~ ")"
 }
 
 number              = @{ (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT) }
-string              = _{ "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
-boolean             = _{ "true" | "false" }
+string              =  { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+btrue               =  { "true" }
+bfalse              =  { "false" }
 
 WHITESPACE          = _{ " " | "\t" | NEWLINE }
 COMMENT             = _{ "//" ~ (!NEWLINE ~ ANY)* }
