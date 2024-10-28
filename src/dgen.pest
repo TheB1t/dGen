@@ -13,14 +13,23 @@ type                = _{ identifier }
 identifier          = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
 
 expr                =  { prefix* ~ primary ~ postfix* ~ (infix ~ prefix* ~ primary ~ postfix* )* }
-infix               = _{ add | sub | mul | div | pow }
-prefix              = _{ neg | inc | dec }
+infix               = _{ add | sub | mul | div | mmod | and | or | eq | neq | gt | lt | gte | lte }
+prefix              = _{ inc | dec | neg | not }
 postfix             = _{ inc | dec }
 add                 =  { "+" }
 sub                 =  { "-" }
 mul                 =  { "*" }
 div                 =  { "/" }
-pow                 =  { "^" }
+mmod                =  { "%" }
+and                 =  { "&&" }
+or                  =  { "||" }
+not                 =  { "!" }
+eq                  =  { "==" }
+neq                 =  { "!=" }
+gt                  =  { ">" }
+lt                  =  { "<" }
+gte                 =  { ">=" }
+lte                 =  { "<=" }
 neg                 =  { "-" }
 inc                 =  { "++" }
 dec                 =  { "--" }

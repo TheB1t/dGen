@@ -13,27 +13,39 @@ lazy_static::lazy_static! {
         use Rule::*;
 
         PrattParser::new()
+            .op(Op::infix(or, Left))
+            .op(Op::infix(and, Left))
+            .op(Op::infix(eq, Left) | Op::infix(neq, Left))
+            .op(Op::infix(lt, Left) | Op::infix(lte, Left) | Op::infix(gt, Left) | Op::infix(gte, Left))
             .op(Op::infix(add, Left) | Op::infix(sub, Left))
-            .op(Op::infix(mul, Left) | Op::infix(div, Left))
-            .op(Op::infix(pow, Right))
-            .op(Op::prefix(neg) | Op::prefix(inc) | Op::prefix(dec))
+            .op(Op::infix(mul, Left) | Op::infix(div, Left) | Op::infix(mmod, Left))
+            .op(Op::prefix(inc) | Op::prefix(dec) | Op::prefix(neg) | Op::prefix(not))
             .op(Op::postfix(inc) | Op::postfix(dec))
     };
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operator {
     Add,
     Sub,
     Mul,
     Div,
-    Pow,
+    Mod,
     Inc,
     Dec,
     Neg,
+    Not,
+    And,
+    Or,
+    Eq,
+    Neq,
+    Lt,
+    Gt,
+    Lte,
+    Gte,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Number(f64),
     Bool(bool),
@@ -51,7 +63,7 @@ pub enum Expr {
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Expr(Expr),
     VarDecl {
@@ -81,6 +93,7 @@ fn parse_expr(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expr {
             Rule::neg           => Expr::UnaryOp { op: Operator::Neg, expr: Box::new(rhs), is_postfix: false },
             Rule::inc           => Expr::UnaryOp { op: Operator::Inc, expr: Box::new(rhs), is_postfix: false },
             Rule::dec           => Expr::UnaryOp { op: Operator::Dec, expr: Box::new(rhs), is_postfix: false },
+            Rule::not           => Expr::UnaryOp { op: Operator::Not, expr: Box::new(rhs), is_postfix: false },
             _                   => unreachable!(),
         })
 
@@ -95,7 +108,15 @@ fn parse_expr(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expr {
             Rule::sub           => Expr::BinaryOp { op: Operator::Sub, left: Box::new(lhs), right: Box::new(rhs) },
             Rule::mul           => Expr::BinaryOp { op: Operator::Mul, left: Box::new(lhs), right: Box::new(rhs) },
             Rule::div           => Expr::BinaryOp { op: Operator::Div, left: Box::new(lhs), right: Box::new(rhs) },
-            Rule::pow           => Expr::BinaryOp { op: Operator::Pow, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::mmod          => Expr::BinaryOp { op: Operator::Mod, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::and           => Expr::BinaryOp { op: Operator::And, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::or            => Expr::BinaryOp { op: Operator::Or, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::eq            => Expr::BinaryOp { op: Operator::Eq, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::neq           => Expr::BinaryOp { op: Operator::Neq, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::lt            => Expr::BinaryOp { op: Operator::Lt, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::gt            => Expr::BinaryOp { op: Operator::Gt, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::lte           => Expr::BinaryOp { op: Operator::Lte, left: Box::new(lhs), right: Box::new(rhs) },
+            Rule::gte           => Expr::BinaryOp { op: Operator::Gte, left: Box::new(lhs), right: Box::new(rhs) },
             _                   => unreachable!(),
         })
 
@@ -126,6 +147,10 @@ fn parse_stmt(stmt: Pair<Rule>) -> Stmt {
                 name: name,
                 value: expr
             }
+        }
+
+        Rule::expr => {
+            Stmt::Expr(parse_expr(stmt.into_inner(), &PRATT_PARSER))
         }
 
         _ => {
