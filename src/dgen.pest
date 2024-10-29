@@ -1,18 +1,29 @@
-program             = _{ SOI ~ (statement ~ ";")* ~ EOI }
+program             = _{ SOI ~ (stmt ~ ";")* ~ EOI }
 
-statement           = _{
-    var_decl
+stmt                = _{
+    func_decl
+    | func_def
+    | var_decl
+    | return_stmt
+    | func_call
     | assignment
     | expr
 }
 
+compound_stmt       =  { "{"  ~ stmt* ~ "}" }
+expr_list           =  { expr ~ ("," ~ expr)* }
+param_list          =  { param ~ ("," ~ param)* }
+type_list           =  { type ~ ("," ~ type)* }
+
+param               =  { type ~ identifier }
+decl                = _{ type ~ identifier }
+func_def            =  { decl ~ "(" ~ param_list? ~ ")" ~ compound_stmt }
+func_decl           =  { decl ~ "(" ~ type_list? ~ ")" }
 var_decl            =  { type ~ identifier ~ ("=" ~ expr)? }
+
+func_call           =  { identifier ~ "(" ~ expr_list? ~ ")" }
+return_stmt         =  { "return" ~ expr? ~ ";" }
 assignment          =  { identifier ~ "=" ~ expr }
-type                = _{ tnum | tstr | tbool | tvoid | identifier }
-tnum                =  { "number" }
-tstr                =  { "string" }
-tbool               =  { "boolean" }
-tvoid               =  { "void" }
 
 identifier          = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
 
@@ -38,7 +49,8 @@ neg                 =  { "-" }
 inc                 =  { "++" }
 dec                 =  { "--" }
 primary             = _{
-    number
+    func_call
+    | number
     | boolean
     | identifier
     | string
@@ -47,9 +59,16 @@ primary             = _{
 
 number              = @{ (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT) }
 string              =  { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
+
 btrue               =  { "true" }
 bfalse              =  { "false" }
 boolean             = _{ btrue | bfalse }
 
-WHITESPACE          = _{ " " | "\t" | NEWLINE }
+tnum                =  { "number" }
+tstr                =  { "string" }
+tbool               =  { "boolean" }
+tvoid               =  { "void" }
+type                = _{ tnum | tstr | tbool | tvoid | identifier }
+
+WHITESPACE          = _{ " " | "\t" | "\r" | NEWLINE }
 COMMENT             = _{ "//" ~ (!NEWLINE ~ ANY)* }

@@ -1,11 +1,15 @@
-use crate::parser::*;
-use crate::parser::Type;
+use crate::{boxable::Boxable, parser::*};
 
 #[derive(Debug, Clone, PartialEq)]
 enum Symbol {
     Var {
         typename: Type,
         name: String,
+    },
+    Func {
+        return_type: Type,
+        name: String,
+        params: Vec<Type>
     }
 }
 
@@ -24,7 +28,15 @@ pub struct SemanticAnalyzer {
 impl Symbol {
     pub fn get_type(&self) -> Type {
         match &self {
-            Symbol::Var { typename, name } => typename.clone()
+            Symbol::Var { typename, .. }        => typename.clone(),
+            Symbol::Func { return_type, .. }    => return_type.clone()
+        }
+    }
+
+    pub fn get_name(&self) -> String {
+        match &self {
+            Symbol::Var { typename : _, name }          => name.clone(),
+            Symbol::Func { return_type : _, name, .. }  => name.clone()
         }
     }
 }
@@ -33,44 +45,45 @@ impl Scope {
     pub fn new() -> Self {
         Scope {
             symbols: Vec::new(),
-            parent: None,
+            parent: None
+        }
+    }
+
+    pub fn with_parent(parent: Box<Scope>) -> Self {
+        Scope {
+            symbols: Vec::new(),
+            parent: Some(parent)
         }
     }
 
     pub fn define_var(&mut self, typename: Type, name: String) {
-        let symbol = Symbol::Var {typename, name};
-        self.symbols.push(symbol);
+        self.symbols.push(Symbol::Var { typename, name });
     }
 
-    pub fn find_symbol(&self, name: &str) -> Option<Symbol> {
-        self.symbols.iter().find(|symbol| match symbol {
-            Symbol::Var { name: var_name, .. } => var_name == name,
-        }).cloned()
+    pub fn define_func(&mut self, return_type: Type, name: String, params: Vec<Type>) {
+        self.symbols.push(Symbol::Func { return_type, name, params });
     }
 
-    pub fn exists(&self, name: &str) -> bool {
-        self.find_symbol(name).is_some() || self.parent.as_ref().map_or_else(|| false, |parent| parent.exists(name))
+    pub fn find_symbol(&self, target: &str) -> Option<Symbol> {
+        self.symbols.iter().find(|symbol| symbol.get_name() == target).cloned()
+            .or_else(|| self.parent.as_deref()?.find_symbol(target))
     }
 }
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
         SemanticAnalyzer {
-            scope: Box::new(Scope::new()),
+            scope: Scope::new().into_box(),
             errors: Vec::new(),
         }
     }
 
     fn enter_scope(&mut self) {
-        let parent = Some(self.scope.clone());
-        self.scope = Box::new(Scope {
-            symbols: Vec::new(),
-            parent,
-        })
+        self.scope = Scope::with_parent(self.scope.clone()).into_box();
     }
 
     fn exit_scope(&mut self) {
-        self.scope = self.scope.parent.take().unwrap();
+        self.scope = self.scope.parent.take().expect("No parent scope to exit to");
     }
 
     fn add_error(&mut self, error: String) {
@@ -83,37 +96,20 @@ impl SemanticAnalyzer {
 
     fn analyze_expr(&mut self, expr: Expr) -> Type {
         match expr.clone() {
-            Expr::Identifier(name) => {
-                let sym = self.scope.find_symbol(&name);
+            Expr::Identifier(name)              => self.lookup_type(&name, expr),
+            Expr::BinaryOp  { left, right, .. } => self.check_binary_expr(*left, *right, expr),
+            Expr::UnaryOp   { expr, .. }        => self.analyze_expr(*expr),
+            Expr::Stmt(stmt)                    => self.analyze_stmt_expr(*stmt),
+            Expr::Bool(_)                       => Type::Boolean,
+            Expr::Number(_)                     => Type::Number,
+            _                                   => Type::Any,
+        }
+    }
 
-                match sym {
-                    Option::Some(v) => v.get_type(),
-                    Option::None => {
-                        self.add_error(format!("Variable '{}' does not exist", name));
-                        Type::Any
-                    }
-                }
-            },
-
-            Expr::BinaryOp { op, left, right } => {
-                let a_left = self.analyze_expr(*left);
-                let a_right = self.analyze_expr(*right);
-
-                if a_left != a_right {
-                    self.add_error(format!("Binary expression type mismatch: {:#?} != {:#?} in {:#?}", a_left, a_right, expr));
-                    Type::Any
-                } else {
-                    a_left
-                }
-            },
-
-            Expr::UnaryOp { op, expr, .. } => {
-                self.analyze_expr(*expr)
-            },
-
-            Expr::Bool(_) => Type::Boolean,
-            Expr::Number(_) => Type::Number,
-
+    fn analyze_stmt_expr(&mut self, stmt: Stmt) -> Type {
+        match stmt.clone() {
+            Stmt::Expr(expr)                => self.analyze_expr(expr),
+            Stmt::FuncCall { name, args }   => self.check_func_call(name, *args),
             _ => Type::Any,
         }
     }
@@ -125,57 +121,115 @@ impl SemanticAnalyzer {
                 let res = Stmt::Block(stmts.into_iter().map(|stmt| self.analyze(stmt)).collect());
                 self.exit_scope();
                 res
-            },
-
+            }
             Stmt::Expr(expr) => {
-                self.analyze_expr(expr.clone());
-
-                Stmt::Expr(expr)
+                self.analyze_expr(expr);
+                root
             }
+            Stmt::Assign    { name, value }                     => self.check_assignment(name, value, root),
+            Stmt::VarDecl   { typename, name, value }           => self.check_var_decl(typename, name, value, root),
+            Stmt::FuncDecl  { return_type, name, params }       => self.check_func_decl(return_type, name, params, root),
+            Stmt::FuncDef   { return_type, name, params, .. }   => self.check_func_def(return_type, name, params, root),
+            Stmt::FuncCall  { name, args }                      => {
+                self.check_func_call(name, *args);
+                root
+            },
+            _ => root,
+        }
+    }
 
-            Stmt::Assign { name, value } => {
-                let sym = self.scope.find_symbol(&name);
+    fn lookup_type(&mut self, name: &str, expr: Expr) -> Type {
+        self.scope.find_symbol(name)
+            .map_or_else(|| {
+                self.add_error(format!("Variable '{}' does not exist", name));
+                Type::Any
+            }, |symbol| symbol.get_type())
+    }
 
-                match sym {
-                    Option::Some(v) => {
-                        let a_value = self.analyze_expr(value.clone());
-                        let expr_type = v.get_type();
+    fn check_binary_expr(&mut self, left: Expr, right: Expr, expr: Expr) -> Type {
+        let left_type = self.analyze_expr(left);
+        let right_type = self.analyze_expr(right);
 
-                        if expr_type != a_value {
-                            self.add_error(format!("Assign type mismatch: {:#?} != {:#?} in {:#?}", expr_type, a_value, root));
-                        }
-                    },
-                    Option::None => {
-                        self.add_error(format!("Variable '{}' does not exist", name));
-                    }
-                };
+        if left_type != right_type {
+            self.add_error(format!("Binary expression type mismatch: {:#?} != {:#?} in {:#?}", left_type, right_type, expr));
+            Type::Any
+        } else {
+            left_type
+        }
+    }
 
-                Stmt::Assign { name, value }
-            }
-
-            Stmt::VarDecl { typename, name, value } => {
-                if self.scope.exists(&name) {
-                    self.add_error(format!("Variable '{}' already exists", name));
-                } else {
-                    self.scope.define_var(typename.clone(), name.clone());
-
-                    let sym = self.scope.find_symbol(&name);
-                    match sym {
-                        Option::Some(v) => {
-                            let a_value = self.analyze_expr(value.clone());
-                            let expr_type = v.get_type();
-
-                            if expr_type != a_value {
-                                self.add_error(format!("Assign type mismatch: {:#?} != {:#?} in {:#?}", expr_type, a_value, root));
+    fn check_func_call(&mut self, name: String, expr_list: Stmt) -> Type {
+        match self.scope.find_symbol(&name) {
+            Some(Symbol::Func { return_type, params, .. }) => {
+                if let Stmt::ExprList(exprs) = expr_list {
+                    if params.len() != exprs.len() {
+                        self.add_error(format!("Function '{}' expects {} arguments, found {}", name, params.len(), exprs.len()));
+                    } else {
+                        for (param_type, expr) in params.iter().zip(exprs) {
+                            let expr_type = self.analyze_expr(expr);
+                            if expr_type != *param_type {
+                                self.add_error(format!("Argument type mismatch in '{}': expected {:#?}, found {:#?}", name, param_type, expr_type));
                             }
-                        },
-                        Option::None => {
-                            self.add_error(format!("Variable '{}' does not exist", name));
                         }
-                    };
+                    }
+                    return_type
+                } else {
+                    Type::Any
                 }
-                Stmt::VarDecl { typename, name, value }
+            }
+            _ => {
+                self.add_error(format!("Function '{}' is not defined", name));
+                Type::Any
             }
         }
+    }
+
+    fn check_assignment(&mut self, name: String, value: Expr, root: Stmt) -> Stmt {
+        if let Some(symbol) = self.scope.find_symbol(&name) {
+            let value_type = self.analyze_expr(value);
+            if symbol.get_type() != value_type {
+                self.add_error(format!("Assignment type mismatch: {:#?} != {:#?} in {:#?}", symbol.get_type(), value_type, root));
+            }
+        } else {
+            self.add_error(format!("Variable '{}' does not exist", name));
+        }
+        root
+    }
+
+    fn check_var_decl(&mut self, typename: Type, name: String, value: Option<Expr>, root: Stmt) -> Stmt {
+        if self.scope.find_symbol(&name).is_some() {
+            self.add_error(format!("Redeclaration of '{}'", name));
+        } else {
+            self.scope.define_var(typename.clone(), name.clone());
+            if let Some(init_value) = value {
+                let init_type = self.analyze_expr(init_value);
+                if init_type != typename {
+                    self.add_error(format!("Declaration type mismatch: {:#?} != {:#?} in {:#?}", typename, init_type, root));
+                }
+            }
+        }
+        root
+    }
+
+    fn check_func_decl(&mut self, return_type: Type, name: String, params: Box<Stmt>, root: Stmt) -> Stmt {
+        if self.scope.find_symbol(&name).is_some() {
+            self.add_error(format!("Redeclaration of '{}'", name));
+        } else if let Stmt::TypeList(param_types) = *params {
+            self.scope.define_func(return_type, name, param_types);
+        }
+        root
+    }
+
+    fn check_func_def(&mut self, return_type: Type, name: String, params: Box<Stmt>, root: Stmt) -> Stmt {
+        if self.scope.find_symbol(&name).is_some() {
+            self.add_error(format!("Redeclaration of '{}'", name));
+        } else if let Stmt::ParamList(param_decls) = *params {
+            let param_types = param_decls.into_iter().map(|param| match param {
+                Stmt::VarDecl { typename, .. }  => typename,
+                _                               => Type::Any,
+            }).collect();
+            self.scope.define_func(return_type, name, param_types);
+        }
+        root
     }
 }

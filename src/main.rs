@@ -1,6 +1,7 @@
 mod parser;
 mod optimizer;
 mod semantic_analyzer;
+mod boxable;
 
 use std::fs::File;
 use std::io::{self, Read};

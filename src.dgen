@@ -1,4 +1,12 @@
-number z = 5;
-number i = (1 + 2) * z + -(5 + 5);
+number func1(number, number);
+
+number z;
+number i = (1 + 2) * z + -(5 + 5) + func1(5, 5);
 number k = i++ + 5;
 boolean b = !(5 == (2 + 3));
+
+number func0(number a, number b) {
+    return 5;
+};
+
+func0(func1(5, 5 + 5), 5);

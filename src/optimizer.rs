@@ -1,10 +1,7 @@
 use crate::parser::*;
+use crate::boxable::Boxable;
 
-trait Evaluate {
-    fn eval(self) -> Expr;
-}
-
-impl Evaluate for Expr {
+impl Expr {
     fn eval(self) -> Expr {
         use Expr::*;
         use Operator::*;
@@ -16,7 +13,7 @@ impl Evaluate for Expr {
                 match (op.clone(), e_expr.clone()) {
                     (Neg, Number(n)) => Number(-n),
                     (Not, Bool(b))   => Bool(!b),
-                    _ => UnaryOp { op, expr: Box::new(e_expr), is_postfix },
+                    _ => UnaryOp { op, expr: e_expr.into_box(), is_postfix },
                 }
             },
 
@@ -46,8 +43,8 @@ impl Evaluate for Expr {
 
                     _ => BinaryOp {
                         op,
-                        left: Box::new(e_left),
-                        right: Box::new(e_right),
+                        left: e_left.into_box(),
+                        right: e_right.into_box(),
                     },
                 }
             },
@@ -58,20 +55,31 @@ impl Evaluate for Expr {
 }
 
 pub fn optimize(root: Stmt) -> Stmt {
+    use Stmt::*;
+
     match root {
-        Stmt::Block(stmts)                      => Stmt::Block(stmts
-                                                                .into_iter()
-                                                                .map(|stmt| optimize(stmt))
-                                                                .collect()),
-        Stmt::Expr(expr)                        => Stmt::Expr(expr.eval()),
-        Stmt::Assign { name, value }            => Stmt::Assign {
+        Block(stmts)                      => Block(stmts
+                                                    .into_iter()
+                                                    .map(|stmt| optimize(stmt))
+                                                    .collect()),
+        Expr(expr)                        => Expr(expr.eval()),
+        Assign { name, value }            => Assign {
             name,
             value: value.eval()
         },
-        Stmt::VarDecl { typename, name, value } => Stmt::VarDecl {
-            typename,
-            name,
-            value: value.eval()
-        }
+        VarDecl { typename, name, value } => {
+            let res = match value.clone() {
+                Option::Some(v) => Some(v.eval()),
+                Option::None    => None
+            };
+
+            VarDecl { typename, name, value: res }
+        },
+        FuncCall { name, args }           => FuncCall { name, args: optimize(*args).into_box() },
+        ExprList(exprs)                   => ExprList(exprs
+                                                        .into_iter()
+                                                        .map(|expr| expr.eval())
+                                                        .collect()),
+        _ => root
     }
 }
