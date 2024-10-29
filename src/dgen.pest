@@ -68,7 +68,8 @@ tnum                =  { "number" }
 tstr                =  { "string" }
 tbool               =  { "boolean" }
 tvoid               =  { "void" }
-type                = _{ tnum | tstr | tbool | tvoid | identifier }
+tobj                =  { "object" }
+type                = _{ tnum | tstr | tbool | tvoid | tobj | identifier }
 
 WHITESPACE          = _{ " " | "\t" | "\r" | NEWLINE }
 COMMENT             = _{ "//" ~ (!NEWLINE ~ ANY)* }

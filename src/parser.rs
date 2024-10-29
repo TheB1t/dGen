@@ -3,6 +3,7 @@ use pest::iterators::Pairs;
 use pest::pratt_parser::PrattParser;
 use pest::Parser;
 
+use crate::dgen_ast::*;
 use crate::boxable::Boxable;
 
 #[derive(pest_derive::Parser)]
@@ -26,95 +27,13 @@ lazy_static::lazy_static! {
     };
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Operator {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Inc,
-    Dec,
-    Neg,
-    Not,
-    And,
-    Or,
-    Eq,
-    Neq,
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Type {
-    Any,
-    Number,
-    String,
-    Boolean,
-    Void,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
-    Number(f64),
-    Bool(bool),
-    String(String),
-    Identifier(String),
-    Stmt(Box<Stmt>),
-    UnaryOp {
-        op: Operator,
-        expr: Box<Expr>,
-        is_postfix: bool
-    },
-    BinaryOp {
-        op: Operator,
-        left: Box<Expr>,
-        right: Box<Expr>
-    },
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Stmt {
-    Expr(Expr),
-    VarDecl {
-        typename: Type,
-        name: String,
-        value: Option<Expr>
-    },
-    FuncDecl {
-        return_type: Type,
-        name: String,
-        params: Box<Stmt>,
-    },
-    FuncDef {
-        return_type: Type,
-        name: String,
-        params: Box<Stmt>,
-        body: Box<Stmt>
-    },
-    Assign {
-        name: String,
-        value: Expr
-    },
-    FuncCall {
-        name: String,
-        args: Box<Stmt>,
-    },
-    TypeList(Vec<Type>),
-    ParamList(Vec<Stmt>),
-    ExprList(Vec<Expr>),
-    Block(Vec<Stmt>),
-    Return(Expr)
-}
-
 fn parse_type(rule: Pair<Rule>) -> Type {
     match rule.as_rule() {
         Rule::tnum          => Type::Number,
         Rule::tstr          => Type::String,
         Rule::tbool         => Type::Boolean,
         Rule::tvoid         => Type::Void,
+        Rule::tobj          => Type::Object,
         _ => unreachable!(),
     }
 }

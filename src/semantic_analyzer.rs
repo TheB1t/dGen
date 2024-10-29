@@ -1,4 +1,5 @@
-use crate::{boxable::Boxable, parser::*};
+use crate::dgen_ast::*;
+use crate::boxable::Boxable;
 
 #[derive(Debug, Clone, PartialEq)]
 enum Symbol {
@@ -35,8 +36,8 @@ impl Symbol {
 
     pub fn get_name(&self) -> String {
         match &self {
-            Symbol::Var { typename : _, name }          => name.clone(),
-            Symbol::Func { return_type : _, name, .. }  => name.clone()
+            Symbol::Var { typename:_, name }          => name.clone(),
+            Symbol::Func { return_type:_, name, .. }  => name.clone()
         }
     }
 }
