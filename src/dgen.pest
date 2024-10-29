@@ -1,10 +1,10 @@
 program             = _{ SOI ~ (stmt ~ ";")* ~ EOI }
 
 stmt                = _{
-    func_decl
+    return_stmt
+    | func_decl
     | func_def
     | var_decl
-    | return_stmt
     | func_call
     | assignment
     | expr

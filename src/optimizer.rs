@@ -49,6 +49,7 @@ impl Expr {
                 }
             },
 
+            Stmt(stmt) => Stmt(optimize(*stmt).into_box()),
             _ => self,
         }
     }
@@ -80,6 +81,17 @@ pub fn optimize(root: Stmt) -> Stmt {
                                                         .into_iter()
                                                         .map(|expr| expr.eval())
                                                         .collect()),
-        _ => root
+        FuncDef { return_type, name, params, body } => FuncDef {
+            return_type,
+            name,
+            params: params,
+            body: optimize(*body).into_box()
+        },
+        Return(expr)                        => Return(expr.eval()),
+        FuncDecl { .. }                     => root,
+        _ => {
+            println!("Optimization is not supported for node {:#?}", root);
+            root
+        }
     }
 }

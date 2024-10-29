@@ -4,6 +4,7 @@ mod semantic_analyzer;
 mod dgen_ast;
 mod sqf_ast;
 mod dgen2sqf_ast;
+mod sqf_generator;
 mod transform;
 mod boxable;
 
@@ -25,6 +26,10 @@ fn main() -> io::Result<()> {
     let sqf_ast : sqf_ast::Stmt = validated_root.transform();
 
     println!("{:#?}", sqf_ast);
+
+    let code = sqf_generator::generate_sqf_code(&sqf_ast);
+
+    println!("{}", code);
 
     for error in semantic_analyzer.errors() {
         println!("Semantic error: {}", error);

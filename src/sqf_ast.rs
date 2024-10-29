@@ -5,8 +5,6 @@ pub enum Operator {
     Mul,
     Div,
     Mod,
-    Inc,
-    Dec,
     Neg,
     Not,
     And,

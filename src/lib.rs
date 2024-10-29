@@ -4,5 +4,6 @@ pub mod semantic_analyzer;
 pub mod dgen_ast;
 pub mod sqf_ast;
 pub mod dgen2sqf_ast;
+pub mod sqf_generator;
 pub mod transform;
 pub mod boxable;
