@@ -6,9 +6,13 @@ statement           = _{
     | expr
 }
 
-var_decl            = { type ~ identifier ~ ("=" ~ expr)? }
-assignment          = { identifier ~ "=" ~ expr }
-type                = _{ identifier }
+var_decl            =  { type ~ identifier ~ ("=" ~ expr)? }
+assignment          =  { identifier ~ "=" ~ expr }
+type                = _{ tnum | tstr | tbool | tvoid | identifier }
+tnum                =  { "number" }
+tstr                =  { "string" }
+tbool               =  { "boolean" }
+tvoid               =  { "void" }
 
 identifier          = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
 
@@ -35,8 +39,7 @@ inc                 =  { "++" }
 dec                 =  { "--" }
 primary             = _{
     number
-    | btrue
-    | bfalse
+    | boolean
     | identifier
     | string
     | "(" ~ expr ~ ")"
@@ -46,6 +49,7 @@ number              = @{ (ASCII_NONZERO_DIGIT ~ ASCII_DIGIT+ | ASCII_DIGIT) }
 string              =  { "\"" ~ (!"\"" ~ ANY)* ~ "\"" }
 btrue               =  { "true" }
 bfalse              =  { "false" }
+boolean             = _{ btrue | bfalse }
 
 WHITESPACE          = _{ " " | "\t" | NEWLINE }
 COMMENT             = _{ "//" ~ (!NEWLINE ~ ANY)* }

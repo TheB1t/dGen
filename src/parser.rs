@@ -46,11 +46,21 @@ pub enum Operator {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Type {
+    Any,
+    Number,
+    String,
+    Boolean,
+    Void,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     Number(f64),
     Bool(bool),
     String(String),
     Identifier(String),
+    Type(Type),
     UnaryOp {
         op: Operator,
         expr: Box<Expr>,
@@ -67,7 +77,7 @@ pub enum Expr {
 pub enum Stmt {
     Expr(Expr),
     VarDecl {
-        typename: String,
+        typename: Type,
         name: String,
         value: Expr
     },
@@ -78,12 +88,22 @@ pub enum Stmt {
     Block(Vec<Stmt>)
 }
 
+fn parse_type(rule: Pair<Rule>) -> Type {
+    match rule.as_rule() {
+        Rule::tnum          => Type::Number,
+        Rule::tstr          => Type::String,
+        Rule::tbool         => Type::Boolean,
+        Rule::tvoid         => Type::Void,
+        _ => unreachable!(),
+    }
+}
+
 fn parse_expr(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expr {
     pratt
         .map_primary(|primary| match primary.as_rule() {
-            Rule::number        => Expr::Number(primary.as_str().parse().unwrap()),
             Rule::btrue         => Expr::Bool(true),
             Rule::bfalse        => Expr::Bool(false),
+            Rule::number        => Expr::Number(primary.as_str().parse().unwrap()),
             Rule::string        => Expr::String(primary.as_str().to_string().replace("\"", "")),
             Rule::identifier    => Expr::Identifier(primary.as_str().to_string()),
             Rule::expr          => parse_expr(primary.into_inner(), pratt), // from "(" ~ expr ~ ")"
@@ -128,7 +148,7 @@ fn parse_stmt(stmt: Pair<Rule>) -> Stmt {
     match stmt.as_rule() {
         Rule::var_decl => {
             let mut inner = stmt.into_inner();
-            let typename = inner.next().unwrap().as_str().to_string();
+            let typename = parse_type(inner.next().unwrap());
             let name = inner.next().unwrap().as_str().to_string();
             let expr = parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER);
 

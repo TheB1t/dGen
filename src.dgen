@@ -1,4 +1,4 @@
-int i = (1 + 2) * z + -(5 + 5);
-z = 5;
-int k = i++ + 5;
-bool b = !(5 == (2 + 3));
+number z = 5;
+number i = (1 + 2) * z + -(5 + 5);
+number k = i++ + 5;
+boolean b = !(5 == (2 + 3));
