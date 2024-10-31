@@ -39,6 +39,23 @@ impl Transform<sqf_ast::Stmt> for dgen_ast::Stmt {
                 body: body.transform().into_box(),
             },
             dgen_ast::Stmt::Return(e)               => sqf_ast::Stmt::Return(e.transform()),
+            dgen_ast::Stmt::Break                   => sqf_ast::Stmt::Break,
+            dgen_ast::Stmt::Continue                => sqf_ast::Stmt::Continue,
+            dgen_ast::Stmt::If { condition, if_block, else_block } => sqf_ast::Stmt::If {
+                condition: condition.transform(),
+                if_block: if_block.transform().into_box(),
+                else_block: else_block.as_ref().map(|b| b.transform().into_box()),
+            },
+            dgen_ast::Stmt::For { init, condition, step, block } => sqf_ast::Stmt::For {
+                init: init.transform().into_box(),
+                condition: condition.transform(),
+                step: step.transform().into_box(),
+                block: block.transform().into_box(),
+            },
+            dgen_ast::Stmt::While { condition, block } => sqf_ast::Stmt::While {
+                condition: condition.transform(),
+                block: block.transform().into_box(),
+            },
             dgen_ast::Stmt::FuncDecl { .. }         => sqf_ast::Stmt::Dummy, // SQF doesn't support function declarations
             _ => {
                 println!("Can't convert {:?} to sqf_ast::Stmt", self);

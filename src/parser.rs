@@ -34,8 +34,8 @@ lazy_static::lazy_static! {
 
 #[derive(Error, Debug)]
 pub enum ParserError {
-    #[error("Failed to parse: {0}")]
-    ParseFailure(String),
+    #[error("Failed to parse input")]
+    ParseFailure,
 
     #[error("Can't open file: {0}")]
     FileOpenErr(String),
@@ -190,6 +190,33 @@ fn parse_stmt(stmt: Pair<Rule>) -> Stmt {
                                                 .map(|param| parse_expr(param.into_inner(), &PRATT_PARSER))
                                                 .collect()),
         Rule::return_stmt   => Stmt::Return(parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER)),
+        Rule::if_stmt       => {
+            let condition = parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER);
+            let if_block = parse_stmt(inner.next().unwrap()).into_box();
+            let else_block = if inner.peek() == None {
+                None
+            } else {
+                Some(parse_stmt(inner.next().unwrap()).into_box())
+            };
+
+            Stmt::If { condition, if_block, else_block }
+        }
+        Rule::for_stmt      => {
+            let init = parse_stmt(inner.next().unwrap()).into_box();
+            let condition = parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER);
+            let step = parse_stmt(inner.next().unwrap()).into_box();
+            let block = parse_stmt(inner.next().unwrap()).into_box();
+
+            Stmt::For { init, condition, step, block }
+        }
+        Rule::while_stmt    => {
+            let condition = parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER);
+            let block = parse_stmt(inner.next().unwrap()).into_box();
+
+            Stmt::While { condition, block }
+        }
+        Rule::break_stmt    => Stmt::Break,
+        Rule::continue_stmt => Stmt::Continue,
         _ => {
             println!("Unhandled rule: {:?}", stmt.as_rule());
             unreachable!()
@@ -206,7 +233,10 @@ pub fn parse(src: String) -> Result<Stmt, io::Error> {
                 None
             }
         }).collect())),
-        Err(e) => Err(ParserError::ParseFailure(e.to_string()).into())
+        Err(e) => {
+            println!("{}", e);
+            Err(ParserError::ParseFailure.into())
+        }
     }
 }
 

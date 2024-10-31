@@ -76,6 +76,8 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     Program(Vec<Stmt>),
     Return(Expr),
+    Break,
+    Continue,
     If {
         condition: Expr,
         if_block: Box<Stmt>,

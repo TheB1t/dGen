@@ -23,6 +23,8 @@ struct Cli {
     input: String,
     #[arg(short, long, default_value = "out.sqf")]
     output: String,
+    #[arg(short, long, default_value = "false")]
+    minify: bool,
 }
 
 fn main() -> io::Result<()> {
@@ -43,7 +45,7 @@ fn main() -> io::Result<()> {
         Err(io::Error::new(io::ErrorKind::InvalidData, "Semantic errors found"))
     } else {
         let sqf_ast : sqf_ast::Stmt = validated_root.transform();
-        let code                    = sqf_ast.generate_sqf(0);
+        let code                    = sqf_ast.generate_sqf(0, args.minify);
         std::fs::write(args.output, code)?;
 
         Ok(())

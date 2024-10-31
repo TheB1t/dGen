@@ -115,12 +115,7 @@ impl SemanticAnalyzer {
                 self.exit_scope();
                 res
             },
-            Stmt::Program(stmts) => {
-                self.enter_scope();
-                let res = Stmt::Program(stmts.into_iter().map(|stmt| self.analyze(stmt)).collect());
-                self.exit_scope();
-                res
-            },
+            Stmt::Program(stmts) => Stmt::Program(stmts.into_iter().map(|stmt| self.analyze(stmt)).collect()),
             Stmt::Expr(expr) => {
                 self.analyze_expr(expr);
                 root
@@ -128,8 +123,37 @@ impl SemanticAnalyzer {
             Stmt::Assign    { name, value }                     => self.check_assignment(name, value, root),
             Stmt::VarDecl   { typename, name, value }           => self.check_var_decl(typename, name, value, root),
             Stmt::FuncDecl  { return_type, name, params }       => self.check_func_decl(return_type, name, params, root),
-            Stmt::FuncDef   { return_type, name, params, .. }   => self.check_func_def(return_type, name, params, root),
-            _ => root,
+            Stmt::FuncDef   { return_type, name, params, body } => self.check_func_def(return_type, name, params, body, root),
+            Stmt::Return(expr) => {
+                self.analyze_expr(expr);
+                root
+            },
+            Stmt::Break => root,
+            Stmt::Continue => root,
+            Stmt::If { condition, if_block, else_block } => {
+                self.analyze_expr(condition);
+                self.analyze(*if_block);
+                if let Some(else_block) = else_block {
+                    self.analyze(*else_block);
+                }
+                root
+            },
+            Stmt::For { init, condition, step, block } => {
+                self.analyze(*init);
+                self.analyze_expr(condition);
+                self.analyze(*step);
+                self.analyze(*block);
+                root
+            },
+            Stmt::While { condition, block } =>  {
+                self.analyze_expr(condition);
+                self.analyze(*block);
+                root
+            },
+            _ => {
+                println!("Unhandled statement type ({:?}) in semantic_analyzer", root.clone());
+                root
+            }
         }
     }
 
@@ -215,15 +239,21 @@ impl SemanticAnalyzer {
         root
     }
 
-    fn check_func_def(&mut self, return_type: Type, name: String, params: Box<Stmt>, root: Stmt) -> Stmt {
+    fn check_func_def(&mut self, return_type: Type, name: String, params: Box<Stmt>, body: Box<Stmt>, root: Stmt) -> Stmt {
         if self.scope.find_symbol(&name).is_some() {
             self.add_error(format!("Redeclaration of '{}'", name));
         } else if let Stmt::ParamList(param_decls) = *params {
-            let param_types = param_decls.into_iter().map(|param| match param {
+            let param_types = param_decls.clone().into_iter().map(|param| match param {
                 Stmt::VarDecl { typename, .. }  => typename,
                 _                               => Type::Any,
             }).collect();
             self.scope.define_func(return_type, name, param_types);
+            self.enter_scope();
+            for param in param_decls {
+                self.analyze(param);
+            };
+            self.analyze(*body);
+            self.exit_scope();
         }
         root
     }

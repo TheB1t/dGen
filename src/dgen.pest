@@ -1,7 +1,12 @@
 program             = _{ SOI ~ (stmt ~ ";")* ~ EOI }
 
 stmt                = _{
-    return_stmt
+    if_stmt
+    | while_stmt
+    | for_stmt
+    | break_stmt
+    | continue_stmt
+    | return_stmt
     | func_decl
     | func_def
     | var_decl
@@ -20,14 +25,21 @@ func_def            =  { decl ~ "(" ~ param_list? ~ ")" ~ compound_stmt }
 func_decl           =  { decl ~ "(" ~ type_list? ~ ")" }
 var_decl            =  { type ~ identifier ~ ("=" ~ expr)? }
 
-func_call           =  { identifier ~ "(" ~ expr_list? ~ ")" }
+if_stmt             =  { "if" ~ "(" ~ expr ~ ")" ~ compound_stmt ~ ("else" ~ compound_stmt)? }
+while_stmt          =  { "while" ~ "(" ~ expr ~ ")" ~ compound_stmt }
+for_stmt            =  { "for" ~ "(" ~ var_decl ~ ";" ~ expr ~ ";" ~ assignment ~ ")" ~ compound_stmt }
+
+break_stmt          =  { "break" }
+continue_stmt       =  { "continue" }
 return_stmt         =  { "return" ~ expr? }
+
+func_call           =  { identifier ~ "(" ~ expr_list? ~ ")" }
 assignment          =  { identifier ~ "=" ~ expr }
 
-identifier          = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
+identifier          = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
 
 expr                =  { prefix* ~ primary ~ postfix* ~ (infix ~ prefix* ~ primary ~ postfix* )* }
-infix               = _{ add | sub | mul | div | mmod | and | or | eq | neq | gt | lt | gte | lte }
+infix               = _{ add | sub | mul | div | mmod | and | or | eq | neq | gte | lte | gt | lt }
 prefix              = _{ inc | dec | neg | not }
 postfix             = _{ inc | dec }
 add                 =  { "+" }

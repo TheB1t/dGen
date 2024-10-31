@@ -94,6 +94,23 @@ pub fn optimize(root: Stmt) -> Stmt {
             body: optimize(*body).into_box()
         },
         Return(expr)                        => Return(expr.eval()),
+        If { condition, if_block, else_block } => If {
+            condition: condition.eval(),
+            if_block: optimize(*if_block).into_box(),
+            else_block: else_block.map(|b| optimize(*b).into_box())
+        },
+        For { init, condition, step, block } => For {
+            init: optimize(*init).into_box(),
+            condition: condition.eval(),
+            step: optimize(*step).into_box(),
+            block: optimize(*block).into_box()
+        },
+        While { condition, block }          => While {
+            condition: condition.eval(),
+            block: optimize(*block).into_box()
+        },
+        Break                               => Break,
+        Continue                            => Continue,
         FuncDecl { .. }                     => root,
         _ => {
             println!("Optimization is not supported for node {:#?}", root);

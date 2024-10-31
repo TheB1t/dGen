@@ -61,5 +61,22 @@ pub enum Stmt {
     ExprList(Vec<Expr>),
     Block(Vec<Stmt>),
     Program(Vec<Stmt>),
-    Return(Expr)
+    Return(Expr),
+    Break,
+    Continue,
+    If {
+        condition: Expr,
+        if_block: Box<Stmt>,
+        else_block: Option<Box<Stmt>>,
+    },
+    For {
+        init: Box<Stmt>,
+        condition: Expr,
+        step: Box<Stmt>,
+        block: Box<Stmt>,
+    },
+    While {
+        condition: Expr,
+        block: Box<Stmt>,
+    },
 }
