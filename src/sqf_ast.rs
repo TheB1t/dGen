@@ -1,21 +1,4 @@
-#[derive(Debug, Clone, PartialEq)]
-pub enum Operator {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Mod,
-    Neg,
-    Not,
-    And,
-    Or,
-    Eq,
-    Neq,
-    Lt,
-    Gt,
-    Lte,
-    Gte,
-}
+use crate::generic::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Type {
@@ -55,7 +38,6 @@ pub enum Expr {
     Bool(bool),
     String(String),
     Identifier(String),
-    Stmt(Box<Stmt>),
     UnaryOp {
         op: Operator,
         expr: Box<Expr>,
@@ -65,6 +47,10 @@ pub enum Expr {
         op: Operator,
         left: Box<Expr>,
         right: Box<Expr>,
+    },
+    FuncCall {
+        name: String,
+        args: Box<Stmt>,
     },
 }
 
@@ -85,13 +71,10 @@ pub enum Stmt {
         name: String,
         value: Expr,
     },
-    FuncCall {
-        name: String,
-        args: Box<Stmt>,
-    },
     ParamList(Vec<String>),
     ExprList(Vec<Expr>),
     Block(Vec<Stmt>),
+    Program(Vec<Stmt>),
     Return(Expr),
     If {
         condition: Expr,

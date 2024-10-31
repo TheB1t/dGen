@@ -5,12 +5,11 @@ stmt                = _{
     | func_decl
     | func_def
     | var_decl
-    | func_call
     | assignment
     | expr
 }
 
-compound_stmt       =  { "{"  ~ stmt* ~ "}" }
+compound_stmt       =  { "{"  ~ (stmt ~ ";")*? ~ "}" }
 expr_list           =  { expr ~ ("," ~ expr)* }
 param_list          =  { param ~ ("," ~ param)* }
 type_list           =  { type ~ ("," ~ type)* }
@@ -22,7 +21,7 @@ func_decl           =  { decl ~ "(" ~ type_list? ~ ")" }
 var_decl            =  { type ~ identifier ~ ("=" ~ expr)? }
 
 func_call           =  { identifier ~ "(" ~ expr_list? ~ ")" }
-return_stmt         =  { "return" ~ expr? ~ ";" }
+return_stmt         =  { "return" ~ expr? }
 assignment          =  { identifier ~ "=" ~ expr }
 
 identifier          = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }

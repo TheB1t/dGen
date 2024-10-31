@@ -1,8 +1,13 @@
+use std::io;
+
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
 use pest::pratt_parser::PrattParser;
 use pest::Parser;
 
+use thiserror::Error;
+
+use crate::generic::*;
 use crate::dgen_ast::*;
 use crate::boxable::Boxable;
 
@@ -27,6 +32,24 @@ lazy_static::lazy_static! {
     };
 }
 
+#[derive(Error, Debug)]
+pub enum ParserError {
+    #[error("Failed to parse: {0}")]
+    ParseFailure(String),
+
+    #[error("Can't open file: {0}")]
+    FileOpenErr(String),
+
+    #[error("Unknown error occurred")]
+    Unknown,
+}
+
+impl From<ParserError> for io::Error {
+    fn from(err: ParserError) -> io::Error {
+        io::Error::new(io::ErrorKind::Other, format!("Parser error: {}", err))
+    }
+}
+
 fn parse_type(rule: Pair<Rule>) -> Type {
     match rule.as_rule() {
         Rule::tnum          => Type::Number,
@@ -38,11 +61,11 @@ fn parse_type(rule: Pair<Rule>) -> Type {
     }
 }
 
-fn parse_func_call(mut pairs: Pairs<Rule>) -> Stmt {
+fn parse_func_call(mut pairs: Pairs<Rule>) -> Expr {
     let name = pairs.next().unwrap().as_str().to_string();
     let args = parse_stmt(pairs.next().unwrap()).into_box();
 
-    Stmt::FuncCall { name, args }
+    Expr::FuncCall { name, args }
 }
 
 fn parse_expr(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expr {
@@ -57,7 +80,7 @@ fn parse_expr(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expr {
             Rule::string        => String(primary.as_str().to_string().replace("\"", "")),
             Rule::identifier    => Identifier(primary.as_str().to_string()),
             Rule::expr          => parse_expr(primary.into_inner(), pratt), // from "(" ~ expr ~ ")"
-            Rule::func_call     => Stmt(parse_func_call(primary.into_inner()).into_box()),
+            Rule::func_call     => parse_func_call(primary.into_inner()),
             _                   => unreachable!(),
         })
 
@@ -167,7 +190,6 @@ fn parse_stmt(stmt: Pair<Rule>) -> Stmt {
                                                 .map(|param| parse_expr(param.into_inner(), &PRATT_PARSER))
                                                 .collect()),
         Rule::return_stmt   => Stmt::Return(parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER)),
-        Rule::func_call     => parse_func_call(inner),
         _ => {
             println!("Unhandled rule: {:?}", stmt.as_rule());
             unreachable!()
@@ -175,23 +197,22 @@ fn parse_stmt(stmt: Pair<Rule>) -> Stmt {
     }
 }
 
-pub fn parse(src: String) -> Stmt {
+pub fn parse(src: String) -> Result<Stmt, io::Error> {
     match CLikeParser::parse(Rule::program, &src) {
-        Ok(pairs) => {
-            let mut block: Vec<Stmt> = Vec::new();
-
-            for pair in pairs {
-                if pair.as_rule() != Rule::EOI {
-                    block.push(parse_stmt(pair));
-                }
+        Ok(pairs) => Ok(Stmt::Program(pairs.into_iter().filter_map(|pair| {
+            if pair.as_rule() != Rule::EOI {
+                Some(parse_stmt(pair))
+            } else {
+                None
             }
+        }).collect())),
+        Err(e) => Err(ParserError::ParseFailure(e.to_string()).into())
+    }
+}
 
-            Stmt::Block(block)
-        }
-
-        Err(e) => {
-            eprintln!("Parse failed: {:?}", e);
-            unreachable!()
-        }
+pub fn parse_file(path: String) -> Result<Stmt, io::Error> {
+    match std::fs::read_to_string(path) {
+        Ok(src) => parse(src),
+        Err(e) => Err(ParserError::FileOpenErr(e.to_string()).into()),
     }
 }

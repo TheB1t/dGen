@@ -1,3 +1,4 @@
+use crate::generic::*;
 use crate::dgen_ast::*;
 use crate::boxable::Boxable;
 
@@ -48,8 +49,10 @@ impl Expr {
                     },
                 }
             },
-
-            Stmt(stmt) => Stmt(optimize(*stmt).into_box()),
+            FuncCall { name, args }             => FuncCall {
+                name,
+                args: optimize(*args).into_box()
+            },
             _ => self,
         }
     }
@@ -60,6 +63,10 @@ pub fn optimize(root: Stmt) -> Stmt {
 
     match root {
         Block(stmts)                      => Block(stmts
+                                                    .into_iter()
+                                                    .map(|stmt| optimize(stmt))
+                                                    .collect()),
+        Program(stmts)                      => Program(stmts
                                                     .into_iter()
                                                     .map(|stmt| optimize(stmt))
                                                     .collect()),
@@ -76,7 +83,6 @@ pub fn optimize(root: Stmt) -> Stmt {
 
             VarDecl { typename, name, value: res }
         },
-        FuncCall { name, args }           => FuncCall { name, args: optimize(*args).into_box() },
         ExprList(exprs)                   => ExprList(exprs
                                                         .into_iter()
                                                         .map(|expr| expr.eval())

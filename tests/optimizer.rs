@@ -5,7 +5,7 @@ use dgen::optimizer::*;
 use dgen::dgen_ast::*;
 
 fn test_optimizer_generic(expr: &str, expected: Expr) {
-    let parsed = parse(expr.to_string());
+    let parsed = parse(expr.to_string()).unwrap();
     let optimized = optimize(parsed);
 
     match optimized {

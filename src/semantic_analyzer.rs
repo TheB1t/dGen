@@ -100,18 +100,10 @@ impl SemanticAnalyzer {
             Expr::Identifier(name)              => self.lookup_type(&name, expr),
             Expr::BinaryOp  { left, right, .. } => self.check_binary_expr(*left, *right, expr),
             Expr::UnaryOp   { expr, .. }        => self.analyze_expr(*expr),
-            Expr::Stmt(stmt)                    => self.analyze_stmt_expr(*stmt),
+            Expr::FuncCall { name, args }       => self.check_func_call(name, *args),
             Expr::Bool(_)                       => Type::Boolean,
             Expr::Number(_)                     => Type::Number,
             _                                   => Type::Any,
-        }
-    }
-
-    fn analyze_stmt_expr(&mut self, stmt: Stmt) -> Type {
-        match stmt.clone() {
-            Stmt::Expr(expr)                => self.analyze_expr(expr),
-            Stmt::FuncCall { name, args }   => self.check_func_call(name, *args),
-            _ => Type::Any,
         }
     }
 
@@ -122,19 +114,21 @@ impl SemanticAnalyzer {
                 let res = Stmt::Block(stmts.into_iter().map(|stmt| self.analyze(stmt)).collect());
                 self.exit_scope();
                 res
-            }
+            },
+            Stmt::Program(stmts) => {
+                self.enter_scope();
+                let res = Stmt::Program(stmts.into_iter().map(|stmt| self.analyze(stmt)).collect());
+                self.exit_scope();
+                res
+            },
             Stmt::Expr(expr) => {
                 self.analyze_expr(expr);
                 root
-            }
+            },
             Stmt::Assign    { name, value }                     => self.check_assignment(name, value, root),
             Stmt::VarDecl   { typename, name, value }           => self.check_var_decl(typename, name, value, root),
             Stmt::FuncDecl  { return_type, name, params }       => self.check_func_decl(return_type, name, params, root),
             Stmt::FuncDef   { return_type, name, params, .. }   => self.check_func_def(return_type, name, params, root),
-            Stmt::FuncCall  { name, args }                      => {
-                self.check_func_call(name, *args);
-                root
-            },
             _ => root,
         }
     }
@@ -152,7 +146,7 @@ impl SemanticAnalyzer {
         let right_type = self.analyze_expr(right);
 
         if left_type != right_type {
-            self.add_error(format!("Binary expression type mismatch: {:#?} != {:#?} in {:#?}", left_type, right_type, expr));
+            self.add_error(format!("Binary expression type mismatch: {:?} != {:?} in {:?}", left_type, right_type, expr));
             Type::Any
         } else {
             left_type
@@ -169,7 +163,7 @@ impl SemanticAnalyzer {
                         for (param_type, expr) in params.iter().zip(exprs) {
                             let expr_type = self.analyze_expr(expr);
                             if expr_type != *param_type {
-                                self.add_error(format!("Argument type mismatch in '{}': expected {:#?}, found {:#?}", name, param_type, expr_type));
+                                self.add_error(format!("Argument type mismatch in '{}': expected {:?}, found {:?}", name, param_type, expr_type));
                             }
                         }
                     }
@@ -189,7 +183,7 @@ impl SemanticAnalyzer {
         if let Some(symbol) = self.scope.find_symbol(&name) {
             let value_type = self.analyze_expr(value);
             if symbol.get_type() != value_type {
-                self.add_error(format!("Assignment type mismatch: {:#?} != {:#?} in {:#?}", symbol.get_type(), value_type, root));
+                self.add_error(format!("Assignment type mismatch: {:?} != {:?} in {:?}", symbol.get_type(), value_type, root));
             }
         } else {
             self.add_error(format!("Variable '{}' does not exist", name));
@@ -205,7 +199,7 @@ impl SemanticAnalyzer {
             if let Some(init_value) = value {
                 let init_type = self.analyze_expr(init_value);
                 if init_type != typename {
-                    self.add_error(format!("Declaration type mismatch: {:#?} != {:#?} in {:#?}", typename, init_type, root));
+                    self.add_error(format!("Declaration type mismatch: {:?} != {:?} in {:?}", typename, init_type, root));
                 }
             }
         }

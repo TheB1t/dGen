@@ -1,4 +1,5 @@
 use crate::transform::*;
+use crate::generic::*;
 use crate::dgen_ast;
 use crate::sqf_ast;
 use crate::boxable::*;
@@ -18,6 +19,9 @@ impl Transform<sqf_ast::Stmt> for dgen_ast::Stmt {
             dgen_ast::Stmt::Block(v) => sqf_ast::Stmt::Block(
                 v.iter().map(|s| s.transform()).collect(),
             ),
+            dgen_ast::Stmt::Program(v) => sqf_ast::Stmt::Program(
+                v.iter().map(|s| s.transform()).collect(),
+            ),
             dgen_ast::Stmt::ParamList(params) => sqf_ast::Stmt::ParamList(
                 params.iter().map(|var_decl| {
                     match var_decl {
@@ -33,10 +37,6 @@ impl Transform<sqf_ast::Stmt> for dgen_ast::Stmt {
                 name: format!("_{}", name),
                 params: params.transform().into_box(),
                 body: body.transform().into_box(),
-            },
-            dgen_ast::Stmt::FuncCall { name, args } => sqf_ast::Stmt::FuncCall {
-                name: format!("_{}", name),
-                args: args.transform().into_box(),
             },
             dgen_ast::Stmt::Return(e)               => sqf_ast::Stmt::Return(e.transform()),
             dgen_ast::Stmt::FuncDecl { .. }         => sqf_ast::Stmt::Dummy, // SQF doesn't support function declarations
@@ -56,67 +56,33 @@ impl Transform<sqf_ast::Expr> for dgen_ast::Expr {
             dgen_ast::Expr::String(s)           => sqf_ast::Expr::String(s.clone()),
             dgen_ast::Expr::Identifier(id)      => sqf_ast::Expr::Identifier(format!("_{}", id)),
             dgen_ast::Expr::UnaryOp { op, expr, is_postfix } => {
-                match op.transform() {
-                    Option::Some(o) => sqf_ast::Expr::UnaryOp {
-                        op: o,
+                match op {
+                    Operator::Inc => sqf_ast::Expr::BinaryOp {
+                        op: Operator::Add,
+                        left: expr.transform().into_box(),
+                        right: sqf_ast::Expr::Number(1.0).into_box(),
+                    },
+                    Operator::Dec => sqf_ast::Expr::BinaryOp {
+                        op: Operator::Sub,
+                        left: expr.transform().into_box(),
+                        right: sqf_ast::Expr::Number(1.0).into_box(),
+                    },
+                    _ => sqf_ast::Expr::UnaryOp {
+                        op: op.clone(),
                         expr: expr.transform().into_box(),
                         is_postfix: *is_postfix,
-                    },
-                    Option::None => match op {
-                        dgen_ast::Operator::Inc => sqf_ast::Expr::BinaryOp {
-                            op: sqf_ast::Operator::Add,
-                            left: expr.transform().into_box(),
-                            right: sqf_ast::Expr::Number(1.0).into_box(),
-                        },
-                        dgen_ast::Operator::Dec => sqf_ast::Expr::BinaryOp {
-                            op: sqf_ast::Operator::Sub,
-                            left: expr.transform().into_box(),
-                            right: sqf_ast::Expr::Number(1.0).into_box(),
-                        },
-                        _ => {
-                            println!("Can't convert {:?} to sqf_ast::Expr", self);
-                            unreachable!()
-                        }
                     }
                 }
             },
-            dgen_ast::Expr::BinaryOp { op, left, right } => {
-                match op.transform() {
-                    Option::Some(o) => sqf_ast::Expr::BinaryOp {
-                        op: o,
-                        left: left.transform().into_box(),
-                        right: right.transform().into_box(),
-                    },
-                    Option::None => {
-                        println!("Can't convert {:?} to sqf_ast::Expr", self);
-                        unreachable!()
-                    }
-                }
+            dgen_ast::Expr::BinaryOp { op, left, right } => sqf_ast::Expr::BinaryOp {
+                op: op.clone(),
+                left: left.transform().into_box(),
+                right: right.transform().into_box(),
             },
-            dgen_ast::Expr::Stmt(stmt)          => sqf_ast::Expr::Stmt(stmt.transform().into_box()),
-        }
-    }
-}
-
-impl Transform<Option<sqf_ast::Operator>> for dgen_ast::Operator {
-    fn transform(&self) -> Option<sqf_ast::Operator> {
-        match self {
-            dgen_ast::Operator::Add => Some(sqf_ast::Operator::Add),
-            dgen_ast::Operator::Sub => Some(sqf_ast::Operator::Sub),
-            dgen_ast::Operator::Mul => Some(sqf_ast::Operator::Mul),
-            dgen_ast::Operator::Div => Some(sqf_ast::Operator::Div),
-            dgen_ast::Operator::Mod => Some(sqf_ast::Operator::Mod),
-            dgen_ast::Operator::Eq  => Some(sqf_ast::Operator::Eq),
-            dgen_ast::Operator::Neq => Some(sqf_ast::Operator::Neq),
-            dgen_ast::Operator::Lt  => Some(sqf_ast::Operator::Lt),
-            dgen_ast::Operator::Lte => Some(sqf_ast::Operator::Lte),
-            dgen_ast::Operator::Gt  => Some(sqf_ast::Operator::Gt),
-            dgen_ast::Operator::Gte => Some(sqf_ast::Operator::Gte),
-            dgen_ast::Operator::And => Some(sqf_ast::Operator::And),
-            dgen_ast::Operator::Or  => Some(sqf_ast::Operator::Or),
-            dgen_ast::Operator::Not => Some(sqf_ast::Operator::Not),
-            dgen_ast::Operator::Neg => Some(sqf_ast::Operator::Neg),
-            _ => None
+            dgen_ast::Expr::FuncCall { name, args } => sqf_ast::Expr::FuncCall {
+                name: format!("_{}", name),
+                args: args.transform().into_box(),
+            },
         }
     }
 }
