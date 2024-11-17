@@ -2,30 +2,57 @@ use std::usize;
 
 use crate::sqf_ast::*;
 
-impl Expr {
-    pub fn generate_sqf(&self, indent: usize, minify: bool) -> String {
+pub trait SQFGenerator {
+    fn generate_sqf(&self, indent: usize, minify: bool) -> String;
+}
+
+impl SQFGenerator for Vec<Stmt> {
+    fn generate_sqf(&self, indent: usize, minify: bool) -> String {
+        self.iter().map(|s| s.generate_sqf(indent, minify)).collect::<Vec<String>>().join("\n")
+    }
+}
+
+impl SQFGenerator for Vec<Expr> {
+    fn generate_sqf(&self, indent: usize, minify: bool) -> String {
+        self.iter().map(|e| e.generate_sqf(indent, minify)).collect::<Vec<String>>().join(", ")
+    }
+}
+
+impl SQFGenerator for Vec<(Type, String)> {
+    fn generate_sqf(&self, indent: usize, minify: bool) -> String {
+        let params = self.iter().map(|(_, s)| format!("\"{}\"", s.clone())).collect::<Vec<String>>().join(", ");
+        format!("{}params [{}];", "    ".repeat(indent), params)
+    }
+}
+
+impl SQFGenerator for Expr {
+    fn generate_sqf(&self, indent: usize, minify: bool) -> String {
         match self {
-            Expr::Number(n)         => n.to_string(),
-            Expr::Bool(b)           => b.to_string(),
-            Expr::String(s)         => format!("\"{}\"", s),
-            Expr::Identifier(id)    => id.clone(),
-            Expr::FuncCall { name, args }           => format!("([{}] call {})", args.generate_sqf(indent, minify), name),
-            Expr::UnaryOp { op, expr, is_postfix }  => {
+            Expr::Number(n)                         => n.to_string(),
+            Expr::Bool(b)                           => b.to_string(),
+            Expr::String(s)                         => format!("\"{}\"", s),
+            Expr::Array(v)                          => format!("[{}]", v.iter().map(|e| e.generate_sqf(indent, minify)).collect::<Vec<String>>().join(", ")),
+            Expr::Identifier(id)                    => id.clone(),
+            Expr::FuncCall(name, args)              => format!("([{}] call {})", args.generate_sqf(indent, minify), name),
+            Expr::UnaryOp(op, expr, is_postfix)     => {
                 if *is_postfix {
                     format!("{}{}", expr.generate_sqf(indent, minify), op.to_string())
                 } else {
                     format!("{}{}", op.to_string(), expr.generate_sqf(indent, minify))
                 }
             },
-            Expr::BinaryOp { left, op, right }      => {
+            Expr::BinaryOp(op, left, right)         => {
                 format!("({}{}{})", left.generate_sqf(indent, minify), op.to_string(), right.generate_sqf(indent, minify))
+            },
+            Expr::ArrayAccess(array, index)         => {
+                format!("{} select {}", array, index.generate_sqf(indent, minify))
             }
         }
     }
 }
 
-impl Stmt {
-    pub fn generate_sqf(&self, indent: usize, minify: bool) -> String {
+impl SQFGenerator for Stmt {
+    fn generate_sqf(&self, indent: usize, minify: bool) -> String {
         let mut indent_str  = "    ".repeat(indent);
         let mut indent_str2 = "    ".repeat(indent + 1);
 
@@ -36,7 +63,7 @@ impl Stmt {
 
         let res = match self {
             Stmt::Expr(expr)                => format!("{}{}", indent_str, expr.generate_sqf(indent, minify)),
-            Stmt::VarDecl { name, value }   => {
+            Stmt::VarDecl(name, value)      => {
                 if value.is_none() {
                     format!("{}private {}", indent_str, name)
                 } else {
@@ -44,11 +71,11 @@ impl Stmt {
                     format!("{}private {}={}", indent_str, name, value_str)
                 }
             }
-            Stmt::Assign { name, value }    => {
+            Stmt::Assign(name, value)       => {
                 let value_str = value.generate_sqf(indent, minify);
                 format!("{}{}={}", indent_str, name, value_str)
             }
-            Stmt::FuncDef { name, params, body } => {
+            Stmt::FuncDef(name, params, body) => {
                 format!(
                     "{}{}={{\n{}\n{}scopeName \"__func__\";\n{}\n{}}}",
                     indent_str,
@@ -59,14 +86,12 @@ impl Stmt {
                     indent_str
                 )
             }
-            Stmt::ParamList(params)         => format!("{}params[\"{}\"];", indent_str, params.join("\",\"")),
-            Stmt::ExprList(exprs)           => exprs.iter().map(|e| e.generate_sqf(indent, minify)).collect::<Vec<_>>().join(","),
             Stmt::Block(stmts)              => stmts.iter().map(|stmt| format!("{};", stmt.generate_sqf(indent + 1, minify))).collect::<Vec<_>>().join("\n"),
             Stmt::Program(stmts)            => stmts.iter().map(|stmt| format!("{};", stmt.generate_sqf(indent, minify))).collect::<Vec<_>>().join("\n"),
             Stmt::Return(expr)              => format!("{}{} breakOut \"__func__\"", indent_str, expr.generate_sqf(indent, minify)),
             Stmt::Break                     => format!("{}break", indent_str),
             Stmt::Continue                  => format!("{}continue", indent_str),
-            Stmt::If { condition, if_block, else_block } => {
+            Stmt::If(condition, if_block, else_block) => {
                 format!(
                     "{}if({})then{{\n{}\n{}{}}}",
                     indent_str,
@@ -76,7 +101,7 @@ impl Stmt {
                     indent_str
                 )
             },
-            Stmt::For { init, condition, step, block } => {
+            Stmt::For(init, condition, step, block) => {
                 format!(
                     "{}for [{{{}}},{{{}}},{{{}}}] do {{\n{}\n{}}}",
                     indent_str,
@@ -87,7 +112,7 @@ impl Stmt {
                     indent_str
                 )
             },
-            Stmt::While { condition, block } => {
+            Stmt::While(condition, block) => {
                 format!(
                     "{}while{{{}}}do{{\n{}\n{}}}",
                     indent_str,

@@ -12,6 +12,7 @@ mod boxable;
 use std::io;
 
 use crate::transform::*;
+use crate::sqf_generator::*;
 use clap::Parser;
 
 #[derive(Parser, Debug)]

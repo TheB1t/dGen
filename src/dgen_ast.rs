@@ -1,3 +1,5 @@
+use clap::builder::Str;
+
 use crate::generic::*;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -16,67 +18,28 @@ pub enum Expr {
     Number(f64),
     Bool(bool),
     String(String),
+    Array(Vec<Expr>),
+    ArrayAccess(String, Box<Expr>),
     Identifier(String),
-    UnaryOp {
-        op: Operator,
-        expr: Box<Expr>,
-        is_postfix: bool
-    },
-    BinaryOp {
-        op: Operator,
-        left: Box<Expr>,
-        right: Box<Expr>
-    },
-    FuncCall {
-        name: String,
-        args: Box<Stmt>,
-    },
+    UnaryOp(Operator, Box<Expr>, bool),
+    BinaryOp(Operator, Box<Expr>, Box<Expr>),
+    FuncCall(String, Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Expr(Expr),
-    VarDecl {
-        typename: Type,
-        name: String,
-        value: Option<Expr>
-    },
-    FuncDecl {
-        return_type: Type,
-        name: String,
-        params: Box<Stmt>,
-    },
-    FuncDef {
-        return_type: Type,
-        name: String,
-        params: Box<Stmt>,
-        body: Box<Stmt>
-    },
-    Assign {
-        name: String,
-        value: Expr
-    },
-    TypeList(Vec<Type>),
-    ParamList(Vec<Stmt>),
-    ExprList(Vec<Expr>),
+    VarDecl(Type, String, Option<Expr>),
+    ArrayDecl(Type, String, Option<Expr>),
+    FuncDecl(Type, String, Vec<Type>),
+    FuncDef(Type, String, Vec<(Type, String)>, Box<Stmt>),
+    Assign(String, Expr),
     Block(Vec<Stmt>),
     Program(Vec<Stmt>),
     Return(Expr),
     Break,
     Continue,
-    If {
-        condition: Expr,
-        if_block: Box<Stmt>,
-        else_block: Option<Box<Stmt>>,
-    },
-    For {
-        init: Box<Stmt>,
-        condition: Expr,
-        step: Box<Stmt>,
-        block: Box<Stmt>,
-    },
-    While {
-        condition: Expr,
-        block: Box<Stmt>,
-    },
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    For(Box<Stmt>, Expr, Box<Stmt>, Box<Stmt>),
+    While(Expr, Box<Stmt>),
 }

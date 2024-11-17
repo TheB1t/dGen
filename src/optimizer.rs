@@ -8,17 +8,17 @@ impl Expr {
         use Operator::*;
 
         match self {
-            UnaryOp { op, expr, is_postfix } => {
+            Array(exprs)                        => Array(exprs.into_iter().map(|e| e.eval()).collect()),
+            UnaryOp(op, expr, is_postfix)       => {
                 let e_expr = expr.eval();
 
                 match (op.clone(), e_expr.clone()) {
                     (Neg, Number(n)) => Number(-n),
                     (Not, Bool(b))   => Bool(!b),
-                    _ => UnaryOp { op, expr: e_expr.into_box(), is_postfix },
+                    _ => UnaryOp(op, e_expr.wrap(), is_postfix),
                 }
             },
-
-            BinaryOp { op, left, right } => {
+            BinaryOp(op, left, right) => {
                 let e_left = left.eval();
                 let e_right = right.eval();
 
@@ -42,17 +42,10 @@ impl Expr {
                     (Eq,  String(l), String(r)) => Bool(l == r),
                     (Neq, String(l), String(r)) => Bool(l != r),
 
-                    _ => BinaryOp {
-                        op,
-                        left: e_left.into_box(),
-                        right: e_right.into_box(),
-                    },
+                    _ => BinaryOp(op, e_left.wrap(), e_right.wrap()),
                 }
             },
-            FuncCall { name, args }             => FuncCall {
-                name,
-                args: optimize(*args).into_box()
-            },
+            FuncCall(name, args)                => FuncCall(name, args.into_iter().map(|e| e.eval()).collect()),
             _ => self,
         }
     }
@@ -62,56 +55,32 @@ pub fn optimize(root: Stmt) -> Stmt {
     use Stmt::*;
 
     match root {
-        Block(stmts)                      => Block(stmts
+        Block(stmts)                    => Block(stmts
                                                     .into_iter()
                                                     .map(|stmt| optimize(stmt))
                                                     .collect()),
-        Program(stmts)                      => Program(stmts
+        Program(stmts)                  => Program(stmts
                                                     .into_iter()
                                                     .map(|stmt| optimize(stmt))
                                                     .collect()),
-        Expr(expr)                        => Expr(expr.eval()),
-        Assign { name, value }            => Assign {
-            name,
-            value: value.eval()
-        },
-        VarDecl { typename, name, value } => {
+        Expr(expr)                      => Expr(expr.eval()),
+        Assign(name, value)             => Assign(name, value.eval()),
+        VarDecl(typename, name, value)  => {
             let res = match value.clone() {
                 Option::Some(v) => Some(v.eval()),
                 Option::None    => None
             };
 
-            VarDecl { typename, name, value: res }
+            VarDecl(typename, name, res)
         },
-        ExprList(exprs)                   => ExprList(exprs
-                                                        .into_iter()
-                                                        .map(|expr| expr.eval())
-                                                        .collect()),
-        FuncDef { return_type, name, params, body } => FuncDef {
-            return_type,
-            name,
-            params: params,
-            body: optimize(*body).into_box()
-        },
-        Return(expr)                        => Return(expr.eval()),
-        If { condition, if_block, else_block } => If {
-            condition: condition.eval(),
-            if_block: optimize(*if_block).into_box(),
-            else_block: else_block.map(|b| optimize(*b).into_box())
-        },
-        For { init, condition, step, block } => For {
-            init: optimize(*init).into_box(),
-            condition: condition.eval(),
-            step: optimize(*step).into_box(),
-            block: optimize(*block).into_box()
-        },
-        While { condition, block }          => While {
-            condition: condition.eval(),
-            block: optimize(*block).into_box()
-        },
-        Break                               => Break,
-        Continue                            => Continue,
-        FuncDecl { .. }                     => root,
+        FuncDef(return_type, name, params, body)    => FuncDef(return_type, name, params, optimize(*body).wrap()),
+        Return(expr)                                => Return(expr.eval()),
+        If(condition, if_block, else_block)         => If(condition.eval(), optimize(*if_block).wrap(), else_block.map(|b| optimize(*b).wrap())),
+        For(init, condition, step, block)           => For(optimize(*init).wrap(), condition.eval(), optimize(*step).wrap(), optimize(*block).wrap()),
+        While(condition, block)                     => While(condition.eval(), optimize(*block).wrap()),
+        Break                                       => Break,
+        Continue                                    => Continue,
+        FuncDecl { .. }                             => root,
         _ => {
             println!("Optimization is not supported for node {:#?}", root);
             root

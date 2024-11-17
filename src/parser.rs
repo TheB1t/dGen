@@ -1,5 +1,8 @@
 use std::io;
 
+use std::fmt::Debug;
+use std::hash::Hash;
+
 use pest::iterators::Pair;
 use pest::iterators::Pairs;
 use pest::pratt_parser::PrattParser;
@@ -32,6 +35,203 @@ lazy_static::lazy_static! {
     };
 }
 
+fn pair_to_string<'a, Rule>(pair: Pair<'a, Rule>) -> String
+where
+    Rule: Debug + Clone + Copy + Hash + Ord,
+{
+    pair.as_str().to_string()
+}
+
+fn pair_to_type_array<'a, Rule>(pair: Pair<'a, Rule>) -> Vec<Type>
+where
+    Rule: Debug + Clone + Copy + Hash + Ord,
+    Type: From<Pair<'a, Rule>>
+{
+    pair.into_inner().into_iter().map(|pair| pair.into()).collect()
+}
+
+fn pair_to_args_array<'a, Rule>(pair: Pair<'a, Rule>) -> Vec<(Type, String)>
+where
+    Rule: Debug + Clone + Copy + Hash + Ord,
+    Type: From<Pair<'a, Rule>>
+{
+    pair.into_inner().into_iter().map(|pair| {
+        let mut inner = pair.into_inner();
+        let ty = inner.next().unwrap().into();
+        let name = inner.next().unwrap().as_str().to_string();
+        (ty, name)
+    }).collect()
+}
+
+impl From<Pair<'_, Rule>> for Type {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        let inner = pair.clone().into_inner().next().unwrap();
+        match inner.as_rule() {
+            Rule::tnum          => Type::Number,
+            Rule::tstr          => Type::String,
+            Rule::tbool         => Type::Boolean,
+            Rule::tvoid         => Type::Void,
+            Rule::tobj          => Type::Object,
+            Rule::tarr          => Type::Array(Into::<Type>::into(inner).wrap()),
+            _ => {
+                println!("Bad type: {:?}", pair);
+                unreachable!()
+            }
+        }
+    }
+}
+
+impl From<Pair<'_, Rule>> for Expr {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        parse_expr(pair.into_inner(), &PRATT_PARSER)
+    }
+}
+
+impl From<Pair<'_, Rule>> for Stmt {
+    fn from(pair: Pair<'_, Rule>) -> Self {
+        let mut inner = pair.clone().into_inner();
+
+        match pair.as_rule() {
+            Rule::var_decl => {
+                let tname   = inner.expect(Rule::r#type);
+                let name    = pair_to_string(inner.expect(Rule::identifier));
+
+                let value = if inner.peek() == None {
+                    None
+                } else {
+                    Some(inner.expect(Rule::expr))
+                };
+
+                Stmt::VarDecl(tname, name, value)
+            }
+
+            Rule::assignment => {
+                let name    = pair_to_string(inner.expect(Rule::identifier));
+                let value   = inner.expect(Rule::expr);
+
+                Stmt::Assign(name, value)
+            }
+
+            Rule::expr => {
+                Stmt::Expr(pair.into())
+            }
+
+            Rule::func_def => {
+                let rtype   = inner.expect(Rule::r#type);
+                let name    = pair_to_string(inner.expect(Rule::identifier));
+                let params  = pair_to_args_array(inner.expect(Rule::param_list));
+                let body : Stmt    = inner.expect(Rule::compound_stmt);
+
+                Stmt::FuncDef(rtype, name, params, body.wrap())
+            }
+
+            Rule::func_decl => {
+                let rtype   = inner.expect(Rule::r#type);
+                let name    = pair_to_string(inner.expect(Rule::identifier));
+                let params  = pair_to_type_array(inner.expect(Rule::type_list));
+
+                Stmt::FuncDecl(rtype, name, params)
+            }
+
+            // Rule::param_list => {
+            //     let mut params = Vec::new();
+
+            //     for param in inner {
+            //         let mut param_inner = param.into_inner();
+            //         let typename = parse_type(param_inner.to_next());
+            //         let name = param_inner.to_next().as_str().to_string();
+
+            //         params.push(Stmt::VarDecl(typename, name, None));
+            //     };
+
+            //     Stmt::ParamList(params)
+            // }
+
+            Rule::compound_stmt => Stmt::Block(inner
+                                                    .into_iter()
+                                                    .map(|param| param.into())
+                                                    .collect()),
+
+            // Rule::type_list     => Stmt::TypeList(inner
+            //                                         .into_iter()
+            //                                         .map(|param| parse_type(param))
+            //                                         .collect()),
+
+            // Rule::expr_list     => Stmt::ExprList(inner
+            //                                         .into_iter()
+            //                                         .map(|param| parse_expr(param.into_inner(), &PRATT_PARSER))
+            //                                         .collect()),
+
+            Rule::return_stmt   => Stmt::Return(inner.expect(Rule::expr)),
+            Rule::if_stmt       => {
+                let cond        = inner.expect(Rule::expr);
+                let if_block    : Stmt = inner.expect(Rule::compound_stmt);
+                let else_block  : Option<Box<Stmt>> = if inner.peek() == None {
+                    None
+                } else {
+                    Some(<Pairs<'_, Rule> as Expectable<Rule, Stmt>>::expect(&mut inner, Rule::compound_stmt).wrap())
+                };
+
+                Stmt::If(cond, if_block.wrap(), else_block)
+            }
+            Rule::for_stmt      => {
+                let init    : Stmt = inner.expect(Rule::var_decl);
+                let cond    = inner.expect(Rule::expr);
+                let step    : Stmt = inner.expect(Rule::assignment);
+                let block   : Stmt = inner.expect(Rule::compound_stmt);
+
+                Stmt::For(init.wrap(), cond, step.wrap(), block.wrap())
+            }
+            Rule::while_stmt    => {
+                let cond    = inner.expect(Rule::expr);
+                let block   : Stmt = inner.expect(Rule::compound_stmt);
+
+                Stmt::While(cond, block.wrap())
+            }
+            Rule::break_stmt    => Stmt::Break,
+            Rule::continue_stmt => Stmt::Continue,
+            _ => {
+                println!("Unhandled rule: {:?}", pair.as_rule());
+                unreachable!()
+            }
+        }
+    }
+}
+
+trait Expectable<I, O> {
+    fn expect(&mut self, val: I) -> O;
+}
+
+impl<'a, I, O> Expectable<I, O> for Pair<'a, I>
+where
+    I: Eq + Debug + Clone + Copy + Hash + Ord,
+    Pair<'a, I>: Into<O>,
+{
+    fn expect(&mut self, val: I) -> O {
+        if self.as_rule() == val {
+            <Pair<'a, I> as Into<O>>::into(self.clone())
+        } else {
+            panic!("Expected {:?}, got {:?}", val, self.as_rule());
+        }
+    }
+}
+
+impl<'a, I, O> Expectable<I, O> for Pairs<'a, I>
+where
+    I: Eq + Debug + Clone + Copy + Hash + Ord,
+    Pair<'a, I>: Into<O>,
+{
+    fn expect(&mut self, val: I) -> O {
+        let peek = self.peek().unwrap();
+
+        if peek.as_rule() == val {
+            <Pair<'a, I> as Into<O>>::into(self.next().unwrap())
+        } else {
+            panic!("Expected {:?}, got {:?}", val, peek.as_rule());
+        }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum ParserError {
     #[error("Failed to parse input")]
@@ -50,22 +250,33 @@ impl From<ParserError> for io::Error {
     }
 }
 
-fn parse_type(rule: Pair<Rule>) -> Type {
-    match rule.as_rule() {
-        Rule::tnum          => Type::Number,
-        Rule::tstr          => Type::String,
-        Rule::tbool         => Type::Boolean,
-        Rule::tvoid         => Type::Void,
-        Rule::tobj          => Type::Object,
-        _ => unreachable!(),
+fn parse_func_call(mut pairs: Pairs<Rule>) -> Expr {
+    let name : Pair<'_, _> = pairs.expect(Rule::identifier);
+
+    let mut args = Vec::new();
+
+    for mut pair in pairs {
+        args.push(pair.expect(Rule::expr));
     }
+
+    Expr::FuncCall(name.as_str().to_string(), args)
 }
 
-fn parse_func_call(mut pairs: Pairs<Rule>) -> Expr {
-    let name = pairs.next().unwrap().as_str().to_string();
-    let args = parse_stmt(pairs.next().unwrap()).into_box();
+fn parse_array_init(pairs: Pairs<Rule>) -> Expr {
+    let mut exprs = Vec::new();
 
-    Expr::FuncCall { name, args }
+    for mut pair in pairs {
+        exprs.push(pair.expect(Rule::expr));
+    }
+
+    Expr::Array(exprs)
+}
+
+fn parse_array_access(mut pairs: Pairs<Rule>) -> Expr {
+    let array       : Pair<'_, _> = pairs.expect(Rule::identifier);
+    let index       : Expr = pairs.expect(Rule::expr);
+
+    Expr::ArrayAccess(array.as_str().to_string(), index.wrap())
 }
 
 fn parse_expr(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expr {
@@ -81,154 +292,50 @@ fn parse_expr(pairs: Pairs<Rule>, pratt: &PrattParser<Rule>) -> Expr {
             Rule::identifier    => Identifier(primary.as_str().to_string()),
             Rule::expr          => parse_expr(primary.into_inner(), pratt), // from "(" ~ expr ~ ")"
             Rule::func_call     => parse_func_call(primary.into_inner()),
+            Rule::array_access  => parse_array_access(primary.into_inner()),
+            Rule::array_init    => parse_array_init(primary.into_inner()),
             _                   => unreachable!(),
         })
 
         .map_prefix(|op, rhs| match op.as_rule() {
-            Rule::neg           => UnaryOp { op: Neg, expr: rhs.into_box(), is_postfix: false },
-            Rule::inc           => UnaryOp { op: Inc, expr: rhs.into_box(), is_postfix: false },
-            Rule::dec           => UnaryOp { op: Dec, expr: rhs.into_box(), is_postfix: false },
-            Rule::not           => UnaryOp { op: Not, expr: rhs.into_box(), is_postfix: false },
+            Rule::neg           => UnaryOp(Neg, rhs.wrap(), false),
+            Rule::inc           => UnaryOp(Inc, rhs.wrap(), false),
+            Rule::dec           => UnaryOp(Dec, rhs.wrap(), false),
+            Rule::not           => UnaryOp(Not, rhs.wrap(), false),
             _                   => unreachable!(),
         })
 
         .map_postfix(|lhs, op| match op.as_rule() {
-            Rule::inc           => UnaryOp { op: Inc, expr: lhs.into_box(), is_postfix: true },
-            Rule::dec           => UnaryOp { op: Dec, expr: lhs.into_box(), is_postfix: true },
+            Rule::inc           => UnaryOp(Inc, lhs.wrap(), true),
+            Rule::dec           => UnaryOp(Dec, lhs.wrap(), true),
             _                   => unreachable!(),
         })
 
         .map_infix(|lhs, op, rhs| match op.as_rule() {
-            Rule::add           => BinaryOp { op: Add, left: lhs.into_box(), right: rhs.into_box() },
-            Rule::sub           => BinaryOp { op: Sub, left: lhs.into_box(), right: rhs.into_box() },
-            Rule::mul           => BinaryOp { op: Mul, left: lhs.into_box(), right: rhs.into_box() },
-            Rule::div           => BinaryOp { op: Div, left: lhs.into_box(), right: rhs.into_box() },
-            Rule::mmod          => BinaryOp { op: Mod, left: lhs.into_box(), right: rhs.into_box() },
-            Rule::and           => BinaryOp { op: And, left: lhs.into_box(), right: rhs.into_box() },
-            Rule::or            => BinaryOp { op: Or,  left: lhs.into_box(), right: rhs.into_box() },
-            Rule::eq            => BinaryOp { op: Eq,  left: lhs.into_box(), right: rhs.into_box() },
-            Rule::neq           => BinaryOp { op: Neq, left: lhs.into_box(), right: rhs.into_box() },
-            Rule::lt            => BinaryOp { op: Lt,  left: lhs.into_box(), right: rhs.into_box() },
-            Rule::gt            => BinaryOp { op: Gt,  left: lhs.into_box(), right: rhs.into_box() },
-            Rule::lte           => BinaryOp { op: Lte, left: lhs.into_box(), right: rhs.into_box() },
-            Rule::gte           => BinaryOp { op: Gte, left: lhs.into_box(), right: rhs.into_box() },
+            Rule::add           => BinaryOp(Add, lhs.wrap(), rhs.wrap()),
+            Rule::sub           => BinaryOp(Sub, lhs.wrap(), rhs.wrap()),
+            Rule::mul           => BinaryOp(Mul, lhs.wrap(), rhs.wrap()),
+            Rule::div           => BinaryOp(Div, lhs.wrap(), rhs.wrap()),
+            Rule::mmod          => BinaryOp(Mod, lhs.wrap(), rhs.wrap()),
+            Rule::and           => BinaryOp(And, lhs.wrap(), rhs.wrap()),
+            Rule::or            => BinaryOp(Or,  lhs.wrap(), rhs.wrap()),
+            Rule::eq            => BinaryOp(Eq,  lhs.wrap(), rhs.wrap()),
+            Rule::neq           => BinaryOp(Neq, lhs.wrap(), rhs.wrap()),
+            Rule::lt            => BinaryOp(Lt,  lhs.wrap(), rhs.wrap()),
+            Rule::gt            => BinaryOp(Gt,  lhs.wrap(), rhs.wrap()),
+            Rule::lte           => BinaryOp(Lte, lhs.wrap(), rhs.wrap()),
+            Rule::gte           => BinaryOp(Gte, lhs.wrap(), rhs.wrap()),
             _                   => unreachable!(),
         })
 
         .parse(pairs)
 }
 
-fn parse_stmt(stmt: Pair<Rule>) -> Stmt {
-    let mut inner = stmt.clone().into_inner();
-
-    match stmt.as_rule() {
-        Rule::var_decl => {
-            let typename = parse_type(inner.next().unwrap());
-            let name = inner.next().unwrap().as_str().to_string();
-
-            let value = if inner.peek() == None {
-                None
-            } else {
-                Some(parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER))
-            };
-
-            Stmt::VarDecl { typename, name, value }
-        }
-
-        Rule::assignment => {
-            let name = inner.next().unwrap().as_str().to_string();
-            let value = parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER);
-
-            Stmt::Assign { name, value }
-        }
-
-        Rule::expr => {
-            Stmt::Expr(parse_expr(stmt.into_inner(), &PRATT_PARSER))
-        }
-
-        Rule::func_def => {
-            let return_type = parse_type(inner.next().unwrap());
-            let name = inner.next().unwrap().as_str().to_string();
-            let params = parse_stmt(inner.next().unwrap()).into_box();
-            let body = parse_stmt(inner.next().unwrap()).into_box();
-
-            Stmt::FuncDef { return_type, name, params, body }
-        }
-
-        Rule::func_decl => {
-            let return_type = parse_type(inner.next().unwrap());
-            let name = inner.next().unwrap().as_str().to_string();
-            let params = parse_stmt(inner.next().unwrap()).into_box();
-
-            Stmt::FuncDecl { return_type, name, params }
-        }
-
-        Rule::param_list => {
-            let mut params = Vec::new();
-
-            for param in inner {
-                let mut param_inner = param.into_inner();
-                let typename = parse_type(param_inner.next().unwrap());
-                let name = param_inner.next().unwrap().as_str().to_string();
-
-                params.push(Stmt::VarDecl { typename, name, value: None });
-            };
-
-            Stmt::ParamList(params)
-        }
-
-        Rule::compound_stmt => Stmt::Block(inner
-                                                .into_iter()
-                                                .map(|param| parse_stmt(param))
-                                                .collect()),
-        Rule::type_list     => Stmt::TypeList(inner
-                                                .into_iter()
-                                                .map(|param| parse_type(param))
-                                                .collect()),
-        Rule::expr_list     => Stmt::ExprList(inner
-                                                .into_iter()
-                                                .map(|param| parse_expr(param.into_inner(), &PRATT_PARSER))
-                                                .collect()),
-        Rule::return_stmt   => Stmt::Return(parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER)),
-        Rule::if_stmt       => {
-            let condition = parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER);
-            let if_block = parse_stmt(inner.next().unwrap()).into_box();
-            let else_block = if inner.peek() == None {
-                None
-            } else {
-                Some(parse_stmt(inner.next().unwrap()).into_box())
-            };
-
-            Stmt::If { condition, if_block, else_block }
-        }
-        Rule::for_stmt      => {
-            let init = parse_stmt(inner.next().unwrap()).into_box();
-            let condition = parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER);
-            let step = parse_stmt(inner.next().unwrap()).into_box();
-            let block = parse_stmt(inner.next().unwrap()).into_box();
-
-            Stmt::For { init, condition, step, block }
-        }
-        Rule::while_stmt    => {
-            let condition = parse_expr(inner.next().unwrap().into_inner(), &PRATT_PARSER);
-            let block = parse_stmt(inner.next().unwrap()).into_box();
-
-            Stmt::While { condition, block }
-        }
-        Rule::break_stmt    => Stmt::Break,
-        Rule::continue_stmt => Stmt::Continue,
-        _ => {
-            println!("Unhandled rule: {:?}", stmt.as_rule());
-            unreachable!()
-        }
-    }
-}
-
 pub fn parse(src: String) -> Result<Stmt, io::Error> {
     match CLikeParser::parse(Rule::program, &src) {
         Ok(pairs) => Ok(Stmt::Program(pairs.into_iter().filter_map(|pair| {
             if pair.as_rule() != Rule::EOI {
-                Some(parse_stmt(pair))
+                Some(pair.into())
             } else {
                 None
             }

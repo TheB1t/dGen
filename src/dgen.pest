@@ -11,11 +11,12 @@ stmt                = _{
     | func_def
     | var_decl
     | assignment
+    | array_assignment
     | expr
 }
 
 compound_stmt       =  { "{"  ~ (stmt ~ ";")*? ~ "}" }
-expr_list           =  { expr ~ ("," ~ expr)* }
+expr_list           = _{ expr ~ ("," ~ expr)* }
 param_list          =  { param ~ ("," ~ param)* }
 type_list           =  { type ~ ("," ~ type)* }
 
@@ -24,6 +25,7 @@ decl                = _{ type ~ identifier }
 func_def            =  { decl ~ "(" ~ param_list? ~ ")" ~ compound_stmt }
 func_decl           =  { decl ~ "(" ~ type_list? ~ ")" }
 var_decl            =  { type ~ identifier ~ ("=" ~ expr)? }
+array_init          =  { "[" ~ expr_list? ~ "]" }
 
 if_stmt             =  { "if" ~ "(" ~ expr ~ ")" ~ compound_stmt ~ ("else" ~ compound_stmt)? }
 while_stmt          =  { "while" ~ "(" ~ expr ~ ")" ~ compound_stmt }
@@ -35,8 +37,10 @@ return_stmt         =  { "return" ~ expr? }
 
 func_call           =  { identifier ~ "(" ~ expr_list? ~ ")" }
 assignment          =  { identifier ~ "=" ~ expr }
+array_assignment    =  { array_access ~ "=" ~ expr }
 
 identifier          = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+array_access        =  { identifier ~ "[" ~ expr ~ "]" }
 
 expr                =  { prefix* ~ primary ~ postfix* ~ (infix ~ prefix* ~ primary ~ postfix* )* }
 infix               = _{ add | sub | mul | div | mmod | and | or | eq | neq | gte | lte | gt | lt }
@@ -61,6 +65,8 @@ inc                 =  { "++" }
 dec                 =  { "--" }
 primary             = _{
     func_call
+    | array_access
+    | array_init
     | number
     | boolean
     | identifier
@@ -75,12 +81,14 @@ btrue               =  { "true" }
 bfalse              =  { "false" }
 boolean             = _{ btrue | bfalse }
 
+tarr                =  { type_base ~ "[]" }
 tnum                =  { "number" }
 tstr                =  { "string" }
 tbool               =  { "boolean" }
 tvoid               =  { "void" }
 tobj                =  { "object" }
-type                = _{ tnum | tstr | tbool | tvoid | tobj | identifier }
+type_base           = _{ tnum | tstr | tbool | tvoid | tobj | identifier }
+type                =  { tarr | type_base }
 
 WHITESPACE          = _{ " " | "\t" | "\r" | NEWLINE }
 COMMENT             = _{ "//" ~ (!NEWLINE ~ ANY)* }

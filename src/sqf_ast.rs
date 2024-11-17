@@ -37,60 +37,27 @@ pub enum Expr {
     Number(f64),
     Bool(bool),
     String(String),
+    Array(Vec<Expr>),
+    ArrayAccess(String, Box<Expr>),
     Identifier(String),
-    UnaryOp {
-        op: Operator,
-        expr: Box<Expr>,
-        is_postfix: bool,
-    },
-    BinaryOp {
-        op: Operator,
-        left: Box<Expr>,
-        right: Box<Expr>,
-    },
-    FuncCall {
-        name: String,
-        args: Box<Stmt>,
-    },
+    UnaryOp(Operator, Box<Expr>, bool),
+    BinaryOp(Operator, Box<Expr>, Box<Expr>),
+    FuncCall(String, Vec<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Dummy,
     Expr(Expr),
-    VarDecl {
-        name: String,
-        value: Option<Expr>,
-    },
-    FuncDef {
-        name: String,
-        params: Box<Stmt>,
-        body: Box<Stmt>,
-    },
-    Assign {
-        name: String,
-        value: Expr,
-    },
-    ParamList(Vec<String>),
-    ExprList(Vec<Expr>),
+    VarDecl(String, Option<Expr>),
+    FuncDef(String, Vec<(Type, String)>, Box<Stmt>),
+    Assign(String, Expr),
     Block(Vec<Stmt>),
     Program(Vec<Stmt>),
     Return(Expr),
     Break,
     Continue,
-    If {
-        condition: Expr,
-        if_block: Box<Stmt>,
-        else_block: Option<Box<Stmt>>,
-    },
-    For {
-        init: Box<Stmt>,
-        condition: Expr,
-        step: Box<Stmt>,
-        block: Box<Stmt>,
-    },
-    While {
-        condition: Expr,
-        block: Box<Stmt>,
-    },
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    For(Box<Stmt>, Expr, Box<Stmt>, Box<Stmt>),
+    While(Expr, Box<Stmt>),
 }
